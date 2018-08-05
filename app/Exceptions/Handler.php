@@ -4,6 +4,10 @@ namespace App\Exceptions;
 
 use Exception;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Http\Response;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
+use Symfony\Component\HttpKernel\Exception\UnauthorizedHttpException;
 
 class Handler extends ExceptionHandler
 {
@@ -13,7 +17,7 @@ class Handler extends ExceptionHandler
      * @var array
      */
     protected $dontReport = [
-        //
+        InvalidRequestException::class,
     ];
 
     /**
@@ -29,7 +33,7 @@ class Handler extends ExceptionHandler
     /**
      * Report or log an exception.
      *
-     * @param  \Exception  $exception
+     * @param  \Exception $exception
      * @return void
      */
     public function report(Exception $exception)
@@ -38,14 +42,27 @@ class Handler extends ExceptionHandler
     }
 
     /**
-     * Render an exception into an HTTP response.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \Exception  $exception
-     * @return \Illuminate\Http\Response
+     * @param \Illuminate\Http\Request $request
+     * @param Exception $exception
+     * @return Response|\Symfony\Component\HttpFoundation\Response
+     * @throws InternalException
+     * @throws InvalidRequestException
      */
     public function render($request, Exception $exception)
     {
+        // 参数验证错误的异常，我们需要返回 400 的 http code 和一句错误信息
+        if ($exception instanceof ValidationException) {
+            throw new InvalidRequestException($exception->errors(), Response::HTTP_BAD_REQUEST);
+        }
+        // 用户认证的异常，我们需要返回 401 的 http code 和错误信息
+        if ($exception instanceof UnauthorizedHttpException) {
+            throw new InvalidRequestException($exception->getMessage(), Response::HTTP_UNAUTHORIZED);
+        }
+        // 频繁访问接口，我们需要返回 429 的 http code 和错误信息
+        if ($exception instanceof TooManyRequestsHttpException) {
+            throw new InternalException($exception->getMessage(), Response::HTTP_TOO_MANY_REQUESTS);
+        }
+
         return parent::render($request, $exception);
     }
 }
